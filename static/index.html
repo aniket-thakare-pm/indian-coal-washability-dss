@@ -31,7 +31,6 @@
   <div class="menu-bar">
     <span class="menu-item">File</span>
     <span class="menu-item">Edit</span>
-    <span class="menu-item">Coal Seam Database</span>
     <span class="menu-item">Model Calibration</span>
     <span class="menu-item">Reports</span>
     <span class="menu-item">Help</span>
@@ -51,17 +50,15 @@
       <div class="panel-box">
         <div class="panel-title">
           <span>1. Feed Characterization</span>
-          <span class="badge-tag">IS 9209 Basis</span>
+          <span class="badge-tag">Universal Feed</span>
         </div>
         <div class="form-group">
           <label>Coal Basin / Seam:</label>
-          <select id="seamSelect" class="form-control">
-            <option value="">Loading Indian Seams...</option>
-          </select>
+          <input type="text" id="seamInput" class="form-control" value="Seam XI (Damodar Valley Basin)" placeholder="Enter coal seam or deposit name...">
         </div>
         <div class="form-group">
           <label>Bulk Raw Feed Ash (Af):</label>
-          <input type="number" id="feedAshInput" class="form-control" value="36.16" step="0.1" style="font-weight: 600;">
+          <input type="number" id="feedAshInput" class="form-control" value="36.16" step="0.1" style="font-weight: 600;" onchange="runCalculation()">
         </div>
       </div>
 
@@ -69,14 +66,13 @@
       <div class="panel-box">
         <div class="panel-title">
           <span>2. Density Cut Inputs</span>
-          <span id="calibrationBadge" class="badge-tag" style="background: #E0F2FE; color: #0369A1;">2-Cut Analytical</span>
         </div>
         
         <!-- Preset selector -->
         <div class="preset-modes">
           <button type="button" class="btn-preset" onclick="setPresetMode(0)">0 Cuts (Prior)</button>
           <button type="button" class="btn-preset" onclick="setPresetMode(1)">1 Cut Anchor</button>
-          <button type="button" class="btn-preset active" onclick="setPresetMode(2)">2 Cuts (Sweet Spot)</button>
+          <button type="button" class="btn-preset active" onclick="setPresetMode(2)">2 Cuts</button>
         </div>
 
         <p style="font-size: 10px; color: #64748B; margin-bottom: 4px;">
@@ -130,6 +126,38 @@
             <input type="checkbox" id="chkOverlayActual" checked onchange="updateCurveVisibility()"> 
             <span style="color: #1E40AF;"><strong>Overlay Measured Lab Data Points</strong> (Ground Truth)</span>
           </label>
+        </div>
+      </div>
+
+      <!-- Panel 4: Operating Target Slider (User Requested) -->
+      <div class="panel-box">
+        <div class="panel-title">
+          <span>4. Operating Cut Target Simulator</span>
+          <label style="font-size: 10.5px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <input type="checkbox" id="chkShowTargetLine" onchange="updateCurveVisibility()">
+            <span style="color: #1E40AF; font-weight: 600;">Show on Graph</span>
+          </label>
+        </div>
+        
+        <div style="margin-bottom: 7px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+            <span>Target Clean Coal Ash (Ap):</span>
+            <strong id="targetAshVal" style="color: #1E40AF; font-size: 11.5px;">17.0 %</strong>
+          </div>
+          <input type="range" id="sliderTargetAsh" min="10" max="34" step="0.2" value="17.0" style="width: 100%;" oninput="onTargetAshSlider(this.value)">
+        </div>
+
+        <div style="margin-bottom: 7px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+            <span>Achievable Clean Coal Yield:</span>
+            <strong id="targetYieldVal" style="color: #059669; font-size: 11.5px;">52.4 %</strong>
+          </div>
+          <input type="range" id="sliderTargetYield" min="10" max="95" step="0.5" value="52.4" style="width: 100%;" oninput="onTargetYieldSlider(this.value)">
+        </div>
+
+        <div style="background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 3px; padding: 5px 8px; font-size: 10.5px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+          <div>Req. Cut SG (d₅₀): <strong id="boxD50" style="color: #1E3A8A;">1.582</strong></div>
+          <div>Rejection Ash: <strong id="boxRejectAsh" style="color: #B91C1C;">62.1 %</strong></div>
         </div>
       </div>
 

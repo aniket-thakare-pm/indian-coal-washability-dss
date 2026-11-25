@@ -1,49 +1,12 @@
 // Global state
-let currentSamples = [];
 let currentCalculation = null;
 
 // Initialize on DOM load
-document.addEventListener("DOMContentLoaded", async () => {
-  await fetchSamples();
-  // Initialize with 2 cuts for IND_001
+document.addEventListener("DOMContentLoaded", () => {
+  // Initialize with 2 default representative cuts
   setPresetMode(2);
   runCalculation();
 });
-
-async function fetchSamples() {
-  try {
-    const res = await fetch("/api/samples");
-    currentSamples = await res.json();
-    const select = document.getElementById("seamSelect");
-    select.innerHTML = "";
-    
-    currentSamples.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.sample_id;
-      opt.textContent = `${s.sample_id} (Feed Ash: ${s.feed_ash}%, ${s.n_fractions} fractions)`;
-      select.appendChild(opt);
-    });
-
-    // Default to IND_001 if present
-    if (currentSamples.some(s => s.sample_id === "IND_001")) {
-      select.value = "IND_001";
-    }
-
-    select.addEventListener("change", onSeamChange);
-  } catch (err) {
-    console.error("Failed to load coal samples:", err);
-  }
-}
-
-function onSeamChange() {
-  const sid = document.getElementById("seamSelect").value;
-  const sample = currentSamples.find(s => s.sample_id === sid);
-  if (sample) {
-    document.getElementById("feedAshInput").value = sample.feed_ash;
-    setPresetMode(2); // auto load 2 representative cuts from sample
-    runCalculation();
-  }
-}
 
 function setPresetMode(cuts) {
   // Update buttons
@@ -54,36 +17,23 @@ function setPresetMode(cuts) {
   const tbody = document.getElementById("cutTableBody");
   tbody.innerHTML = "";
 
-  const sid = document.getElementById("seamSelect").value;
-  const sample = currentSamples.find(s => s.sample_id === sid);
-
   if (cuts === 0) {
     // 0 cuts: Feed ash alone
     updatePointCount();
+    runCalculation();
     return;
   }
 
   if (cuts === 1) {
     // 1 cut: around SG 1.58
-    if (sample && sample.fractions.length >= 6) {
-      const f = sample.fractions[Math.min(5, sample.fractions.length - 1)];
-      addCutRow(f.sg_midpoint, f.cum_yield, f.cum_ash);
-    } else {
-      addCutRow(1.575, 59.74, 20.31);
-    }
+    addCutRow(1.575, 59.74, 20.31);
   } else if (cuts === 2) {
     // 2 cuts: around SG 1.42 and SG 1.75
-    if (sample && sample.fractions.length >= 8) {
-      const f1 = sample.fractions[2];
-      const f2 = sample.fractions[7];
-      addCutRow(f1.sg_midpoint, f1.cum_yield, f1.cum_ash);
-      addCutRow(f2.sg_midpoint, f2.cum_yield, f2.cum_ash);
-    } else {
-      addCutRow(1.425, 25.82, 15.41);
-      addCutRow(1.750, 75.49, 44.17);
-    }
+    addCutRow(1.425, 25.82, 15.41);
+    addCutRow(1.750, 75.49, 44.17);
   }
   updatePointCount();
+  runCalculation();
 }
 
 function addCutRow(sg = 1.50, yieldVal = 50.0, ashVal = 20.0) {
@@ -93,9 +43,9 @@ function addCutRow(sg = 1.50, yieldVal = 50.0, ashVal = 20.0) {
 
   tr.innerHTML = `
     <td>${rowCount}</td>
-    <td><input type="number" step="0.005" class="input-sg" value="${sg}"></td>
-    <td><input type="number" step="0.1" class="input-yield" value="${yieldVal}"></td>
-    <td><input type="number" step="0.1" class="input-ash" value="${ashVal}"></td>
+    <td><input type="number" step="0.005" class="input-sg" value="${sg}" onchange="runCalculation()"></td>
+    <td><input type="number" step="0.1" class="input-yield" value="${yieldVal}" onchange="runCalculation()"></td>
+    <td><input type="number" step="0.1" class="input-ash" value="${ashVal}" onchange="runCalculation()"></td>
     <td><button type="button" class="btn-del" onclick="deleteCutRow(this)">×</button></td>
   `;
   tbody.appendChild(tr);
@@ -104,43 +54,30 @@ function addCutRow(sg = 1.50, yieldVal = 50.0, ashVal = 20.0) {
 
 function deleteCutRow(btn) {
   btn.closest("tr").remove();
-  // renumber
   const rows = document.querySelectorAll("#cutTableBody tr");
   rows.forEach((r, i) => r.children[0].textContent = i + 1);
   updatePointCount();
+  runCalculation();
 }
 
 function updatePointCount() {
   const count = document.querySelectorAll("#cutTableBody tr").length;
   const text = document.getElementById("pointCountText");
-  const badge = document.getElementById("calibrationBadge");
 
   if (count === 0) {
     text.textContent = "0 Cuts (Prior Mode)";
-    badge.textContent = "Empirical Prior";
-    badge.style.background = "#EEF2F6";
-    badge.style.color = "#334155";
   } else if (count === 1) {
     text.textContent = "1 Cut Anchor Defined";
-    badge.textContent = "1-Cut Anchored";
-    badge.style.background = "#FEF3C7";
-    badge.style.color = "#92400E";
   } else if (count === 2) {
-    text.textContent = "2 Cuts (Exact Analytical)";
-    badge.textContent = "2-Cut Analytical";
-    badge.style.background = "#E0F2FE";
-    badge.style.color = "#0369A1";
+    text.textContent = "2 Cuts (Analytical Inversion)";
   } else {
     text.textContent = `${count} Cuts Defined`;
-    badge.textContent = `Multi-Cut (${count})`;
-    badge.style.background = "#DCFCE7";
-    badge.style.color = "#166534";
   }
 }
 
 async function runCalculation() {
   const feedAsh = parseFloat(document.getElementById("feedAshInput").value) || 36.16;
-  const sampleId = document.getElementById("seamSelect").value || null;
+  const seamName = document.getElementById("seamInput").value || "Seam XI";
 
   // Gather cuts
   const rows = document.querySelectorAll("#cutTableBody tr");
@@ -156,8 +93,8 @@ async function runCalculation() {
 
   const payload = {
     feed_ash: feedAsh,
-    sample_id: sampleId,
-    target_clean_ash: 17.0,
+    sample_id: "IND_001", // reference for benchmark error tracking
+    target_clean_ash: parseFloat(document.getElementById("sliderTargetAsh").value) || 17.0,
     cut_points: cut_points
   };
 
@@ -171,6 +108,9 @@ async function runCalculation() {
 
     const data = await res.json();
     currentCalculation = data;
+
+    // Update Operational Target Slider Readouts
+    syncSliderWithCalculation();
 
     // Update KPIs
     document.getElementById("kpiD50").textContent = `${data.kpis.cut_density_d50} g/cm³`;
@@ -204,11 +144,82 @@ async function runCalculation() {
   }
 }
 
+// Operational Target Slider Synchronization
+function onTargetAshSlider(targetAsh) {
+  targetAsh = parseFloat(targetAsh);
+  document.getElementById("targetAshVal").textContent = `${targetAsh.toFixed(1)} %`;
+
+  if (!currentCalculation || !currentCalculation.spectrum) return;
+  const spec = currentCalculation.spectrum;
+
+  // Find index where cum_float_ash is closest to targetAsh
+  let bestIdx = 0;
+  let minDiff = 999;
+  for (let i = 0; i < spec.cum_float_ash.length; i++) {
+    const diff = Math.abs(spec.cum_float_ash[i] - targetAsh);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestIdx = i;
+    }
+  }
+
+  const yVal = spec.cum_float_yield[bestIdx];
+  const d50Val = spec.rho[bestIdx];
+  const rejectAsh = spec.cum_sink_ash[bestIdx];
+
+  document.getElementById("targetYieldVal").textContent = `${yVal.toFixed(1)} %`;
+  document.getElementById("sliderTargetYield").value = yVal;
+  document.getElementById("boxD50").textContent = d50Val.toFixed(3);
+  document.getElementById("boxRejectAsh").textContent = `${rejectAsh.toFixed(1)} %`;
+
+  if (document.getElementById("chkShowTargetLine").checked) {
+    updateCurveVisibility();
+  }
+}
+
+function onTargetYieldSlider(targetYield) {
+  targetYield = parseFloat(targetYield);
+  document.getElementById("targetYieldVal").textContent = `${targetYield.toFixed(1)} %`;
+
+  if (!currentCalculation || !currentCalculation.spectrum) return;
+  const spec = currentCalculation.spectrum;
+
+  // Find index where cum_float_yield is closest to targetYield
+  let bestIdx = 0;
+  let minDiff = 999;
+  for (let i = 0; i < spec.cum_float_yield.length; i++) {
+    const diff = Math.abs(spec.cum_float_yield[i] - targetYield);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestIdx = i;
+    }
+  }
+
+  const ashVal = spec.cum_float_ash[bestIdx];
+  const d50Val = spec.rho[bestIdx];
+  const rejectAsh = spec.cum_sink_ash[bestIdx];
+
+  document.getElementById("targetAshVal").textContent = `${ashVal.toFixed(1)} %`;
+  document.getElementById("sliderTargetAsh").value = ashVal;
+  document.getElementById("boxD50").textContent = d50Val.toFixed(3);
+  document.getElementById("boxRejectAsh").textContent = `${rejectAsh.toFixed(1)} %`;
+
+  if (document.getElementById("chkShowTargetLine").checked) {
+    updateCurveVisibility();
+  }
+}
+
+function syncSliderWithCalculation() {
+  if (!currentCalculation) return;
+  const curAsh = parseFloat(document.getElementById("sliderTargetAsh").value) || 17.0;
+  onTargetAshSlider(curAsh);
+}
+
 function renderPlotlyChart(data) {
   const spec = data.spectrum;
   const traces = [];
 
-  // 1. Elementary Ash Curve (frac_ash vs cum_float_yield) -> Bottom X, Left Y
+  // 1. Elementary Ash Curve
   traces.push({
     x: spec.frac_ash,
     y: spec.cum_float_yield,
@@ -221,7 +232,7 @@ function renderPlotlyChart(data) {
     visible: document.getElementById("chkElementary").checked ? true : false
   });
 
-  // 2. Cumulative Floats Curve (cum_float_ash vs cum_float_yield) -> Bottom X, Left Y
+  // 2. Cumulative Floats Curve (Clean Coal)
   traces.push({
     x: spec.cum_float_ash,
     y: spec.cum_float_yield,
@@ -234,7 +245,7 @@ function renderPlotlyChart(data) {
     visible: document.getElementById("chkFloat").checked ? true : false
   });
 
-  // 3. Cumulative Sinks Curve (cum_sink_ash vs cum_float_yield) -> Bottom X, Left Y
+  // 3. Cumulative Sinks Curve (Discard)
   traces.push({
     x: spec.cum_sink_ash,
     y: spec.cum_float_yield,
@@ -247,7 +258,7 @@ function renderPlotlyChart(data) {
     visible: document.getElementById("chkSink").checked ? true : false
   });
 
-  // 4. Density - Yield Curve (rho vs cum_float_yield) -> Top X2, Left Y
+  // 4. Density - Yield Curve
   traces.push({
     x: spec.rho,
     y: spec.cum_float_yield,
@@ -288,11 +299,60 @@ function renderPlotlyChart(data) {
     });
   }
 
+  // 6. Optional Operating Target Crosshair Guide Lines (Section 4 Slider)
+  const showTarget = document.getElementById("chkShowTargetLine").checked;
+  const shapes = [];
+  const annotations = [];
+
+  if (showTarget) {
+    const tAsh = parseFloat(document.getElementById("sliderTargetAsh").value) || 17.0;
+    const tYield = parseFloat(document.getElementById("sliderTargetYield").value) || 52.4;
+    const d50 = document.getElementById("boxD50").textContent;
+
+    // Horizontal guide line from x=0 to x=tAsh at y=tYield
+    shapes.push({
+      type: "line",
+      x0: 0,
+      x1: tAsh,
+      y0: tYield,
+      y1: tYield,
+      line: { color: "#7C3AED", width: 1.8, dash: "dashdot" }
+    });
+
+    // Vertical guide line from y=0 (top) down to y=tYield at x=tAsh
+    shapes.push({
+      type: "line",
+      x0: tAsh,
+      x1: tAsh,
+      y0: 0,
+      y1: tYield,
+      line: { color: "#7C3AED", width: 1.8, dash: "dashdot" }
+    });
+
+    // Operational target marker dot on Cumulative Float curve
+    traces.push({
+      x: [tAsh],
+      y: [tYield],
+      name: `Operating Target (Ash: ${tAsh}%, Yield: ${tYield}%)`,
+      type: "scatter",
+      mode: "markers+text",
+      marker: { size: 12, color: "#7C3AED", symbol: "star", line: { width: 2, color: "#FFFFFF" } },
+      text: [`Target: ${tAsh}% Ash → Yield ${tYield}% (d₅₀=${d50})`],
+      textposition: "bottom right",
+      textfont: { family: "Segoe UI", size: 10, color: "#5B21B6" },
+      xaxis: "x",
+      yaxis: "y",
+      showlegend: true
+    });
+  }
+
   // 4-Axis Standard Layout
   const layout = {
     margin: { l: 65, r: 65, t: 65, b: 55 },
     font: { family: "Segoe UI, sans-serif", size: 11 },
     showlegend: true,
+    shapes: shapes,
+    annotations: annotations,
     legend: {
       orientation: "h",
       x: 0.5,
@@ -300,7 +360,6 @@ function renderPlotlyChart(data) {
       y: -0.15,
       font: { size: 10 }
     },
-    // Primary Left Y-axis (Inverted 0 at top -> 100 at bottom)
     yaxis: {
       title: "<b>Cumulative Wt % Floats (Recovery)</b>",
       range: [100, 0], // Inverted
@@ -308,16 +367,14 @@ function renderPlotlyChart(data) {
       gridcolor: "#E2E8F0",
       zeroline: false
     },
-    // Secondary Right Y-axis (Inverted 100 at top -> 0 at bottom)
     yaxis2: {
       title: "<b>Cumulative Wt % Sinks (Discard)</b>",
-      range: [0, 100], // Sinks scale
+      range: [0, 100],
       overlaying: "y",
       side: "right",
       showgrid: false,
       zeroline: false
     },
-    // Primary Bottom X-axis (Ash % 0 to 100)
     xaxis: {
       title: "<b>Ash % (Air-Dried Basis)</b>",
       range: [0, 100],
@@ -325,7 +382,6 @@ function renderPlotlyChart(data) {
       gridcolor: "#E2E8F0",
       zeroline: false
     },
-    // Secondary Top X-axis (Relative Density 2.2 on left down to 1.3 on right - Inverted!)
     xaxis2: {
       title: "<b>Relative Density (Specific Gravity, g/cm³)</b>",
       range: [2.2, 1.25], // Inverted
@@ -348,7 +404,6 @@ function renderScheduleTable(spec) {
   const tbody = document.getElementById("scheduleTableBody");
   tbody.innerHTML = "";
 
-  // Pick ~20 representative density cuts
   const step = Math.floor(spec.rho.length / 22);
   for (let i = 0; i < spec.rho.length; i += step) {
     const tr = document.createElement("tr");
@@ -384,7 +439,7 @@ function switchView(view) {
 
 async function exportCSV() {
   const feedAsh = parseFloat(document.getElementById("feedAshInput").value) || 36.16;
-  const sampleId = document.getElementById("seamSelect").value || "custom";
+  const seamName = document.getElementById("seamInput").value || "Custom";
 
   const rows = document.querySelectorAll("#cutTableBody tr");
   const cut_points = [];
@@ -400,14 +455,14 @@ async function exportCSV() {
   const res = await fetch("/api/export/csv", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ feed_ash: feedAsh, sample_id: sampleId, cut_points: cut_points })
+    body: JSON.stringify({ feed_ash: feedAsh, sample_id: seamName, cut_points: cut_points })
   });
 
   const blob = await res.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `washability_${sampleId}_${feedAsh}pct.csv`;
+  a.download = `washability_${seamName.replace(/[^a-zA-Z0-9]/g, "_")}_${feedAsh}pct.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
