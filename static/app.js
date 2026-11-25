@@ -67,9 +67,9 @@ function updatePointCount() {
   if (count === 0) {
     text.textContent = "0 Cuts (Prior Mode)";
   } else if (count === 1) {
-    text.textContent = "1 Cut Anchor Defined";
+    text.textContent = "1 Cut Defined";
   } else if (count === 2) {
-    text.textContent = "2 Cuts (Analytical Inversion)";
+    text.textContent = "2 Cuts Defined";
   } else {
     text.textContent = `${count} Cuts Defined`;
   }
